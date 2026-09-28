@@ -1,0 +1,135 @@
+// Prisma Schema for Jadwal Pengambilan Rapor - Sekolah Islam Mumtaz
+// Configured for Aiven PostgreSQL, Vercel Deployment, and local SQLite
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String            @id @default(uuid())
+  username     String            @unique
+  passwordHash String
+  name         String
+  role         String            @default("SUPERVISOR") // "ADMIN" or "SUPERVISOR"
+  active       Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  supervisions SupervisorClass[]
+
+  @@map("users")
+}
+
+model Class {
+  id           String            @id @default(uuid())
+  name         String            @unique
+  active       Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  students     Student[]
+  slots        TimeSlot[]
+  bookings     Booking[]
+  supervisors  SupervisorClass[]
+
+  @@map("classes")
+}
+
+model Student {
+  id        String    @id @default(uuid())
+  name      String
+  classId   String
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  bookings  Booking[]
+
+  @@unique([name, classId])
+  @@map("students")
+}
+
+model Event {
+  id              String            @id @default(uuid())
+  name            String
+  date            String            // "YYYY-MM-DD"
+  startTime       String            @default("08:00") // "08:00"
+  breakStart      String            @default("11:45") // "11:45"
+  breakEnd        String            @default("13:00") // "13:00"
+  durationMinutes Int               @default(15)
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  slots           TimeSlot[]
+  bookings        Booking[]
+  supervisors     SupervisorClass[]
+
+  @@map("events")
+}
+
+model TimeSlot {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  startTime String   // "08:00"
+  endTime   String   // "08:15"
+  status    String   @default("AVAILABLE") // "AVAILABLE" or "BOOKED"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  booking   Booking?
+
+  @@unique([eventId, classId, startTime, endTime])
+  @@map("time_slots")
+}
+
+model Booking {
+  id            String    @id @default(uuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId       String
+  class         Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  slotId        String    @unique
+  slot          TimeSlot  @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  bookingDate   String
+  status        String    @default("BELUM_DATANG") // "BELUM_DATANG", "MENUNGGU", "SEDANG_DILAYANI", "SELESAI", "TERLAMBAT"
+  parentArrived Boolean   @default(false)
+  arrivedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([eventId, slotId])
+  @@unique([eventId, studentId])
+  @@map("bookings")
+}
+
+model SupervisorClass {
+  id           String   @id @default(uuid())
+  supervisorId String
+  supervisor   User     @relation(fields: [supervisorId], references: [id], onDelete: Cascade)
+  classId      String
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([supervisorId, classId, eventId])
+  @@map("supervisor_classes")
+}
+
+model AppSetting {
+  id        String   @id @default(uuid())
+  title     String   @default("Jadwal Pengambilan Rapor")
+  subtitle  String   @default("Silakan pilih jadwal pengambilan rapor Ananda")
+  logo      String   @default("/mumtaz.png")
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
