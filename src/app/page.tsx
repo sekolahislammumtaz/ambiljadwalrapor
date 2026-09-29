@@ -18,6 +18,7 @@ import {
   Eye,
   RefreshCw,
 } from 'lucide-react';
+import { sortClassesNaturally } from '@/lib/class-sorter';
 
 interface ClassItem {
   id: string;
@@ -91,7 +92,7 @@ export default function HomePage() {
       if (json.success) {
         if (json.data.setting) setSetting(json.data.setting);
         setActiveEvent(json.data.event);
-        setClasses(json.data.classes || []);
+        setClasses(sortClassesNaturally(json.data.classes || []));
       }
     } catch (err) {
       console.error('Failed to load initial data', err);

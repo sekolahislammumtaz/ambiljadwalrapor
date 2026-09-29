@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { sortClassesNaturally } from '@/lib/class-sorter';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,11 +22,11 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // 3. Active Classes
-    const classes = await prisma.class.findMany({
+    // 3. Active Classes (diurutkan dari kelas 7 ke 12)
+    const rawClasses = await prisma.class.findMany({
       where: { active: true },
-      orderBy: { name: 'asc' },
     });
+    const classes = sortClassesNaturally(rawClasses);
 
     let students: any[] = [];
     let slots: any[] = [];

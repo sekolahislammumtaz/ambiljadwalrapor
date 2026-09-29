@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { getUserFromRequest } from '@/lib/auth';
+import { sortClassesNaturally } from '@/lib/class-sorter';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +18,10 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    const classes = await prisma.class.findMany({
+    const rawClasses = await prisma.class.findMany({
       where: { active: true },
-      orderBy: { name: 'asc' },
     });
+    const classes = sortClassesNaturally(rawClasses);
 
     let selectedClassIds: string[] = [];
 

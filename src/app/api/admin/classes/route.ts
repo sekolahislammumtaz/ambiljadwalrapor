@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getUserFromRequest } from '@/lib/auth';
+import { sortClassesNaturally } from '@/lib/class-sorter';
 
 function checkAdmin(req: NextRequest) {
   const user = getUserFromRequest(req);
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
       orderBy: { name: 'asc' },
     });
 
-    return NextResponse.json({ success: true, data: classes });
+    return NextResponse.json({ success: true, data: sortClassesNaturally(classes) });
   } catch (error: any) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
