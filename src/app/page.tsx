@@ -693,7 +693,7 @@ export default function HomePage() {
             Sekolah Islam Mumtaz Bandar Lampung
           </p>
           <p className="text-[11px] text-slate-500">
-            Sistem Informasi Jadwal Pengambilan Rapor Santri/Siswa • Siap Produksi
+            Sistem Informasi Jadwal Pengambilan Rapor Siswa
           </p>
         </div>
       </footer>
