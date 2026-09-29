@@ -15,6 +15,8 @@ export async function POST(req: NextRequest) {
         success: false,
         message: 'Password Admin tidak valid untuk menjalankan inisialisasi database.',
       }, { status: 403 });
+    }
+
     console.log('[setup-db] Menginisialisasi database Supabase PostgreSQL...');
 
     // 1. App Settings
