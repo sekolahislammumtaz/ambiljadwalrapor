@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { getUserFromRequest } from '@/lib/auth';
 
@@ -71,27 +72,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Event aktif tidak ditemukan' }, { status: 400 });
     }
 
-    // Simpan pilihan kelas pengawas dalam transaksi
-    await prisma.$transaction(async (tx) => {
-      // Hapus pilihan sebelumnya untuk event ini
-      await tx.supervisorClass.deleteMany({
-        where: {
-          supervisorId: user.userId,
-          eventId: targetEventId,
-        },
-      });
-
-      // Tambahkan pilihan baru
-      for (const cId of classIds) {
-        await tx.supervisorClass.create({
-          data: {
-            supervisorId: user.userId,
-            classId: cId,
-            eventId: targetEventId,
-          },
-        });
-      }
+    // Hapus pilihan sebelumnya untuk event ini
+    await prisma.supervisorClass.deleteMany({
+      where: {
+        supervisorId: user.userId,
+        eventId: targetEventId,
+      },
     });
+
+    // Tambahkan pilihan baru secara batch jika ada kelas yang dipilih
+    if (classIds.length > 0) {
+      await prisma.supervisorClass.createMany({
+        data: classIds.map((cId: string) => ({
+          id: randomUUID(),
+          supervisorId: user.userId,
+          classId: cId,
+          eventId: targetEventId,
+        })),
+      });
+    }
 
     return NextResponse.json({
       success: true,

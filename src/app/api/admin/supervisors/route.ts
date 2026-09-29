@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { getUserFromRequest } from '@/lib/auth';
 
@@ -73,26 +74,25 @@ export async function PUT(req: NextRequest) {
 
     // Update kelas yang diawasi jika classIds & eventId diberikan
     if (classIds !== undefined && eventId) {
-      await prisma.$transaction(async (tx) => {
-        // Hapus penugasan lama untuk event ini
-        await tx.supervisorClass.deleteMany({
-          where: {
-            supervisorId,
-            eventId,
-          },
-        });
-
-        // Buat penugasan baru
-        for (const cId of classIds) {
-          await tx.supervisorClass.create({
-            data: {
-              supervisorId,
-              classId: cId,
-              eventId,
-            },
-          });
-        }
+      // Hapus penugasan lama untuk event ini
+      await prisma.supervisorClass.deleteMany({
+        where: {
+          supervisorId,
+          eventId,
+        },
       });
+
+      // Buat penugasan baru secara batch jika ada kelas yang dipilih
+      if (Array.isArray(classIds) && classIds.length > 0) {
+        await prisma.supervisorClass.createMany({
+          data: classIds.map((cId: string) => ({
+            id: randomUUID(),
+            supervisorId,
+            classId: cId,
+            eventId,
+          })),
+        });
+      }
     }
 
     return NextResponse.json({ success: true, message: 'Data pengawas berhasil diperbarui' });

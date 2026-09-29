@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { getUserFromRequest } from '@/lib/auth';
 import { generateTimeSlots } from '@/lib/slot-generator';
@@ -91,44 +92,43 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    // Jika overwrite, hapus slot yang belum dibooking (atau hapus semua jika diizinkan)
-    await prisma.$transaction(async (tx) => {
-      // Hapus slot yang tidak terhubung dengan booking
-      await tx.timeSlot.deleteMany({
-        where: {
-          eventId,
-          classId,
-          status: 'AVAILABLE',
-        },
-      });
-
-      // Tambahkan slot baru yang belum ada
-      for (const s of generated) {
-        // Cek apakah slot di jam ini sudah ada (misal booked)
-        const exists = await tx.timeSlot.findUnique({
-          where: {
-            eventId_classId_startTime_endTime: {
-              eventId,
-              classId,
-              startTime: s.startTime,
-              endTime: s.endTime,
-            },
-          },
-        });
-
-        if (!exists) {
-          await tx.timeSlot.create({
-            data: {
-              eventId,
-              classId,
-              startTime: s.startTime,
-              endTime: s.endTime,
-              status: 'AVAILABLE',
-            },
-          });
-        }
-      }
+    // Hapus slot yang belum dibooking (status AVAILABLE)
+    await prisma.timeSlot.deleteMany({
+      where: {
+        eventId,
+        classId,
+        status: 'AVAILABLE',
+      },
     });
+
+    // Ambil slot yang sudah ter-booking pada kelas & event ini agar tidak bertabrakan
+    const bookedSlots = await prisma.timeSlot.findMany({
+      where: {
+        eventId,
+        classId,
+        status: 'BOOKED',
+      },
+      select: { startTime: true, endTime: true },
+    });
+    const bookedSet = new Set(bookedSlots.map((b) => `${b.startTime}-${b.endTime}`));
+
+    // Filter hanya slot yang belum pernah dibooking
+    const slotsToInsert = generated
+      .filter((s) => !bookedSet.has(`${s.startTime}-${s.endTime}`))
+      .map((s) => ({
+        id: randomUUID(),
+        eventId,
+        classId,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        status: 'AVAILABLE',
+      }));
+
+    if (slotsToInsert.length > 0) {
+      await prisma.timeSlot.createMany({
+        data: slotsToInsert,
+      });
+    }
 
     const currentSlots = await prisma.timeSlot.findMany({
       where: { eventId, classId },

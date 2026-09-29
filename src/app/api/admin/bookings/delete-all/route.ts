@@ -38,26 +38,23 @@ export async function POST(req: NextRequest) {
       }, { status: 403 });
     }
 
-    // Eksekusi penghapusan seluruh booking pada event tersebut dan reset status slot
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Hitung booking yang akan dihapus
-      const totalBookings = await tx.booking.count({
-        where: { eventId },
-      });
-
-      // 2. Hapus seluruh booking di event ini
-      await tx.booking.deleteMany({
-        where: { eventId },
-      });
-
-      // 3. Reset seluruh slot di event ini menjadi AVAILABLE
-      const updatedSlots = await tx.timeSlot.updateMany({
-        where: { eventId },
-        data: { status: 'AVAILABLE' },
-      });
-
-      return { totalBookings, updatedSlots: updatedSlots.count };
+    // 1. Hitung booking yang akan dihapus
+    const totalBookings = await prisma.booking.count({
+      where: { eventId },
     });
+
+    // 2. Hapus seluruh booking di event ini
+    await prisma.booking.deleteMany({
+      where: { eventId },
+    });
+
+    // 3. Reset seluruh slot di event ini menjadi AVAILABLE
+    const updatedSlots = await prisma.timeSlot.updateMany({
+      where: { eventId },
+      data: { status: 'AVAILABLE' },
+    });
+
+    const result = { totalBookings, updatedSlots: updatedSlots.count };
 
     return NextResponse.json({
       success: true,

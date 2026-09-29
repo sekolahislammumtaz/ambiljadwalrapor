@@ -25,19 +25,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Booking tidak ditemukan' }, { status: 404 });
     }
 
-    // Jalankan dalam transaksi: hapus booking dan kembalikan slot ke AVAILABLE
-    await prisma.$transaction(async (tx) => {
-      await tx.booking.delete({
-        where: { id: bookingId },
-      });
-
-      if (booking.slotId) {
-        await tx.timeSlot.update({
-          where: { id: booking.slotId },
-          data: { status: 'AVAILABLE' },
-        });
-      }
+    await prisma.booking.delete({
+      where: { id: bookingId },
     });
+
+    if (booking.slotId) {
+      await prisma.timeSlot.update({
+        where: { id: booking.slotId },
+        data: { status: 'AVAILABLE' },
+      });
+    }
 
     return NextResponse.json({
       success: true,
