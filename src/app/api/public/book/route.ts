@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
       if (!student || student.classId !== classId) {
         throw new Error('Data siswa tidak valid untuk kelas yang dipilih');
       }
+      if (!student.active) {
+        throw new Error(`Data siswa "${student.name}" sedang dalam penangguhan administrasi (Hold). Silakan hubungi bagian tata usaha/administrasi sekolah.`);
+      }
 
       // 3. Cek apakah siswa sudah memiliki jadwal pada event ini
       const existingStudentBooking = await tx.booking.findFirst({

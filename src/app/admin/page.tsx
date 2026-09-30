@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -29,6 +29,11 @@ import {
   Square,
   ArrowRight,
   UploadCloud,
+  UserX,
+  UserCheck,
+  PauseCircle,
+  PlayCircle,
+  ShieldAlert,
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
@@ -36,7 +41,7 @@ export default function AdminDashboardPage() {
 
   // Navigation
   const [activeTab, setActiveTab] = useState<
-    'dashboard' | 'events' | 'classes' | 'students' | 'generator' | 'recap' | 'supervisors' | 'settings'
+    'dashboard' | 'events' | 'classes' | 'students' | 'administrasi' | 'generator' | 'recap' | 'supervisors' | 'settings'
   >('dashboard');
 
   const [loading, setLoading] = useState(true);
@@ -74,6 +79,16 @@ export default function AdminDashboardPage() {
   const [recapClassFilter, setRecapClassFilter] = useState('');
   const [recapSearch, setRecapSearch] = useState('');
   const [recapStatusFilter, setRecapStatusFilter] = useState('ALL');
+
+  // Administrasi (Hold & Unhold) State
+  const [adminSubTab, setAdminSubTab] = useState<'active' | 'held'>('active');
+  const [adminClassFilter, setAdminClassFilter] = useState('');
+  const [adminSearch, setAdminSearch] = useState('');
+  const [selectedAdminStudentIds, setSelectedAdminStudentIds] = useState<string[]>([]);
+  const [holdModalOpen, setHoldModalOpen] = useState(false);
+  const [unholdModalOpen, setUnholdModalOpen] = useState(false);
+  const [holdProcessing, setHoldProcessing] = useState(false);
+  const [targetSingleStudent, setTargetSingleStudent] = useState<any | null>(null);
 
   // Generator State
   const [genClassId, setGenClassId] = useState('');
@@ -492,6 +507,106 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // --- ADMINISTRASI (HOLD / UNHOLD) LOGIC ---
+  const filteredAdminStudents = useMemo(() => {
+    return students.filter((s) => {
+      // 1. Filter sub-tab (active vs held)
+      if (adminSubTab === 'active' && s.active === false) return false;
+      if (adminSubTab === 'held' && s.active !== false) return false;
+
+      // 2. Filter kelas
+      if (adminClassFilter && s.classId !== adminClassFilter) return false;
+
+      // 3. Filter search nama
+      if (adminSearch && !s.name.toLowerCase().includes(adminSearch.toLowerCase())) return false;
+
+      return true;
+    });
+  }, [students, adminSubTab, adminClassFilter, adminSearch]);
+
+  const activeStudentsCount = useMemo(() => {
+    return students.filter((s) => s.active !== false).length;
+  }, [students]);
+
+  const heldStudentsCount = useMemo(() => {
+    return students.filter((s) => s.active === false).length;
+  }, [students]);
+
+  const handleToggleSelectAllAdmin = () => {
+    const displayedIds = filteredAdminStudents.map((s) => s.id);
+    const allSelected = displayedIds.length > 0 && displayedIds.every((id) => selectedAdminStudentIds.includes(id));
+
+    if (allSelected) {
+      setSelectedAdminStudentIds((prev) => prev.filter((id) => !displayedIds.includes(id)));
+    } else {
+      const newSet = new Set([...selectedAdminStudentIds, ...displayedIds]);
+      setSelectedAdminStudentIds(Array.from(newSet));
+    }
+  };
+
+  const handleToggleSelectAdminStudent = (studentId: string) => {
+    setSelectedAdminStudentIds((prev) =>
+      prev.includes(studentId) ? prev.filter((id) => id !== studentId) : [...prev, studentId]
+    );
+  };
+
+  const handleSwitchAdminSubTab = (tab: 'active' | 'held') => {
+    setAdminSubTab(tab);
+    setSelectedAdminStudentIds([]);
+  };
+
+  const handleExecuteHold = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    try {
+      setHoldProcessing(true);
+      const res = await fetch('/api/admin/students/hold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentIds: ids, hold: true }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showNotification('success', json.message || `Berhasil menahan ${ids.length} siswa.`);
+        setSelectedAdminStudentIds([]);
+        setHoldModalOpen(false);
+        setTargetSingleStudent(null);
+        await fetchStudentsData();
+      } else {
+        showNotification('error', json.message || 'Gagal menahan siswa');
+      }
+    } catch (err: any) {
+      showNotification('error', err.message || 'Terjadi kesalahan sistem');
+    } finally {
+      setHoldProcessing(false);
+    }
+  };
+
+  const handleExecuteUnhold = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    try {
+      setHoldProcessing(true);
+      const res = await fetch('/api/admin/students/hold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentIds: ids, hold: false }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showNotification('success', json.message || `Berhasil melepas hold ${ids.length} siswa.`);
+        setSelectedAdminStudentIds([]);
+        setUnholdModalOpen(false);
+        setTargetSingleStudent(null);
+        await fetchStudentsData();
+      } else {
+        showNotification('error', json.message || 'Gagal melepas hold siswa');
+      }
+    } catch (err: any) {
+      showNotification('error', err.message || 'Terjadi kesalahan sistem');
+    } finally {
+      setHoldProcessing(false);
+    }
+  };
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/admin/login');
@@ -525,6 +640,7 @@ export default function AdminDashboardPage() {
             { id: 'events', label: 'Pengaturan Jadwal', icon: Calendar },
             { id: 'classes', label: 'Kelas', icon: GraduationCap },
             { id: 'students', label: 'Siswa', icon: Users },
+            { id: 'administrasi', label: 'Administrasi', icon: UserX },
             { id: 'generator', label: 'Generator Jadwal', icon: Cpu },
             { id: 'recap', label: 'Rekap Pengambilan Rapor', icon: FileSpreadsheet },
             { id: 'supervisors', label: 'Pengaturan Pengawas', icon: ShieldCheck },
@@ -580,6 +696,7 @@ export default function AdminDashboardPage() {
               {activeTab === 'events' && 'Pengaturan Event & Periode'}
               {activeTab === 'classes' && 'Manajemen Kelas'}
               {activeTab === 'students' && 'Manajemen Data Siswa'}
+              {activeTab === 'administrasi' && 'Administrasi & Status Hold Siswa'}
               {activeTab === 'generator' && 'Generator Slot Jadwal'}
               {activeTab === 'recap' && 'Rekap Pengambilan Rapor'}
               {activeTab === 'supervisors' && 'Manajemen Akun Pengawas'}
@@ -1054,6 +1171,328 @@ export default function AdminDashboardPage() {
                           </tr>
                         );
                       })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: ADMINISTRASI & HOLD/UNHOLD SISWA */}
+          {activeTab === 'administrasi' && (
+            <div className="space-y-6">
+              {/* Header Card */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-navy-900 text-gold-400 flex items-center justify-center flex-shrink-0 shadow">
+                      <ShieldAlert className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-navy-950">
+                        Administrasi & Pengendalian Akses Siswa
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Tahan (Hold) siswa yang belum menyelesaikan administrasi agar namanya tidak tampil di halaman utama, atau lepaskan (Unhold) agar dapat memilih jadwal kembali.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ringkasan Statistik Siswa */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total Siswa</p>
+                      <p className="text-xl font-black text-navy-950 mt-0.5">{students.length}</p>
+                    </div>
+                    <div className="w-9 h-9 rounded-lg bg-navy-100 text-navy-900 flex items-center justify-center">
+                      <Users className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Siswa Aktif (Tampil di Web)</p>
+                      <p className="text-xl font-black text-emerald-900 mt-0.5">{activeStudentsCount}</p>
+                    </div>
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  <div className="bg-rose-50/60 border border-rose-200/80 rounded-xl p-3.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Siswa Di-Hold (Ditahan)</p>
+                      <p className="text-xl font-black text-rose-900 mt-0.5">{heldStudentsCount}</p>
+                    </div>
+                    <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-800 flex items-center justify-center">
+                      <UserX className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter, Search & Sub-Tabs */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  {/* Sub-Tabs: Siswa Aktif vs Siswa di-Hold */}
+                  <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchAdminSubTab('active')}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${
+                        adminSubTab === 'active'
+                          ? 'bg-navy-900 text-gold-400 shadow-sm'
+                          : 'text-slate-600 hover:text-navy-950'
+                      }`}
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Daftar Siswa Aktif</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                          adminSubTab === 'active' ? 'bg-gold-500 text-navy-950' : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {activeStudentsCount}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchAdminSubTab('held')}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition ${
+                        adminSubTab === 'held'
+                          ? 'bg-rose-700 text-white shadow-sm'
+                          : 'text-slate-600 hover:text-navy-950'
+                      }`}
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                      <span>Daftar Siswa di-Hold</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                          adminSubTab === 'held' ? 'bg-white text-rose-800' : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {heldStudentsCount}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Filter Kelas & Search Nama */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Filter Kelas */}
+                    <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-slate-500" />
+                      <select
+                        value={adminClassFilter}
+                        onChange={(e) => {
+                          setAdminClassFilter(e.target.value);
+                          setSelectedAdminStudentIds([]);
+                        }}
+                        className="bg-transparent text-xs font-medium text-slate-700 focus:outline-none"
+                      >
+                        <option value="">Semua Kelas</option>
+                        {classes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Search Nama Siswa */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Cari nama siswa..."
+                        value={adminSearch}
+                        onChange={(e) => setAdminSearch(e.target.value)}
+                        className="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg w-48 sm:w-56 focus:outline-none focus:ring-1 focus:ring-navy-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bulk Action Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 bg-slate-50/80 -mx-5 -mb-5 p-4 rounded-b-2xl">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-bold text-slate-700">
+                      {filteredAdminStudents.length} siswa ditampilkan
+                    </span>
+                    {selectedAdminStudentIds.length > 0 && (
+                      <span className="bg-navy-900 text-gold-400 font-bold px-2.5 py-0.5 rounded-full text-[11px]">
+                        {selectedAdminStudentIds.length} siswa dipilih
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {adminSubTab === 'active' ? (
+                      <button
+                        type="button"
+                        disabled={selectedAdminStudentIds.length === 0}
+                        onClick={() => {
+                          setTargetSingleStudent(null);
+                          setHoldModalOpen(true);
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5"
+                      >
+                        <PauseCircle className="w-4 h-4" />
+                        <span>Hold Siswa Terpilih ({selectedAdminStudentIds.length})</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={selectedAdminStudentIds.length === 0}
+                        onClick={() => {
+                          setTargetSingleStudent(null);
+                          setUnholdModalOpen(true);
+                        }}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5"
+                      >
+                        <PlayCircle className="w-4 h-4" />
+                        <span>Unhold Siswa Terpilih ({selectedAdminStudentIds.length})</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Table of Students */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto max-h-[550px]">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-slate-100 text-slate-700 font-bold uppercase border-b border-slate-200 z-10">
+                      <tr>
+                        <th className="py-3 px-4 w-12 text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              filteredAdminStudents.length > 0 &&
+                              filteredAdminStudents.every((s) => selectedAdminStudentIds.includes(s.id))
+                            }
+                            onChange={handleToggleSelectAllAdmin}
+                            className="w-4 h-4 rounded text-navy-900 focus:ring-navy-800 cursor-pointer"
+                            title="Pilih Semua Siswa di Halaman Ini"
+                          />
+                        </th>
+                        <th className="py-3 px-3 w-12 text-slate-500">No</th>
+                        <th className="py-3 px-4">Nama Siswa</th>
+                        <th className="py-3 px-4 w-40">Kelas</th>
+                        <th className="py-3 px-4 w-40 text-center">Status Jadwal</th>
+                        <th className="py-3 px-4 w-44 text-center">Status Akses Web</th>
+                        <th className="py-3 px-4 w-28 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredAdminStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-slate-500">
+                            {adminSubTab === 'held' ? (
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                                  <CheckCircle className="w-6 h-6" />
+                                </div>
+                                <p className="font-bold text-slate-700 text-sm">Tidak ada siswa yang sedang di-Hold</p>
+                                <p className="text-xs text-slate-400 max-w-sm">
+                                  Semua siswa aktif dan dapat memilih jadwal pengambilan rapor di halaman utama.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <Users className="w-8 h-8 text-slate-300" />
+                                <p className="font-semibold text-slate-600">Tidak ada data siswa yang cocok dengan filter</p>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredAdminStudents.map((s, idx) => {
+                          const isSelected = selectedAdminStudentIds.includes(s.id);
+                          const isHeld = s.active === false;
+                          const hasBooking = s.bookings && s.bookings.length > 0;
+
+                          return (
+                            <tr
+                              key={s.id}
+                              className={`transition-colors ${
+                                isSelected ? 'bg-gold-50/60' : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <td className="py-2.5 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleSelectAdminStudent(s.id)}
+                                  className="w-4 h-4 rounded text-navy-900 focus:ring-navy-800 cursor-pointer"
+                                />
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-400 font-mono">{idx + 1}</td>
+                              <td className="py-2.5 px-4 font-bold text-navy-950">
+                                <span>{s.name}</span>
+                              </td>
+                              <td className="py-2.5 px-4 text-slate-600 font-semibold">
+                                {s.class?.name}
+                              </td>
+                              <td className="py-2.5 px-4 text-center">
+                                {hasBooking ? (
+                                  <span className="bg-emerald-100 text-emerald-800 font-semibold px-2.5 py-0.5 rounded-full text-[11px]">
+                                    Sudah Booking
+                                  </span>
+                                ) : (
+                                  <span className="bg-slate-100 text-slate-500 font-medium px-2 py-0.5 rounded-full text-[11px]">
+                                    Belum Booking
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-4 text-center">
+                                {isHeld ? (
+                                  <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 font-bold px-2.5 py-0.5 rounded-full text-[11px] border border-rose-200">
+                                    <PauseCircle className="w-3 h-3" />
+                                    <span>Di-Hold (Tidak Tampil)</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full text-[11px] border border-emerald-200">
+                                    <CheckCircle className="w-3 h-3" />
+                                    <span>Aktif (Tampil di Web)</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-4 text-center">
+                                {isHeld ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTargetSingleStudent(s);
+                                      setUnholdModalOpen(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg transition inline-flex items-center gap-1"
+                                    title="Lepas Hold (Unhold)"
+                                  >
+                                    <PlayCircle className="w-3 h-3" />
+                                    <span>Unhold</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTargetSingleStudent(s);
+                                      setHoldModalOpen(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] rounded-lg transition inline-flex items-center gap-1"
+                                    title="Tahan Siswa (Hold)"
+                                  >
+                                    <PauseCircle className="w-3 h-3" />
+                                    <span>Hold</span>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1666,6 +2105,197 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: KONFIRMASI HOLD SISWA */}
+      {holdModalOpen && (
+        <div className="fixed inset-0 bg-navy-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="bg-rose-950 text-white p-5 border-b-2 border-rose-500">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <UserX className="w-5 h-5 text-rose-400" />
+                <span>Konfirmasi Hold Siswa</span>
+              </h3>
+              <p className="text-xs text-rose-300 mt-0.5">
+                Menahan akses pemilihan jadwal pengambilan rapor
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Anda akan menahan (Hold){' '}
+                <strong>
+                  {targetSingleStudent
+                    ? `1 siswa (${targetSingleStudent.name})`
+                    : `${selectedAdminStudentIds.length} siswa`}
+                </strong>
+                .
+              </p>
+
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-rose-600" />
+                  <span>Dampak Penahanan (Hold):</span>
+                </p>
+                <ul className="list-disc list-inside text-[11px] text-rose-700 pl-1 space-y-0.5">
+                  <li>Nama siswa <strong>tidak akan muncul</strong> pada pilihan nama di web utama orang tua.</li>
+                  <li>Orang tua tidak dapat memesan jadwal untuk siswa yang di-Hold.</li>
+                  <li>Status dapat dikembalikan sewaktu-waktu di menu Unhold.</li>
+                </ul>
+              </div>
+
+              {/* Daftar Siswa yang akan di-Hold */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Daftar Siswa yang Ditahan:
+                </p>
+                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50">
+                  {(targetSingleStudent
+                    ? [targetSingleStudent]
+                    : students.filter((s) => selectedAdminStudentIds.includes(s.id))
+                  ).map((st) => (
+                    <div
+                      key={st.id}
+                      className="text-xs flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200"
+                    >
+                      <span className="font-bold text-navy-950">{st.name}</span>
+                      <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                        {st.class?.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={holdProcessing}
+                  onClick={() => {
+                    setHoldModalOpen(false);
+                    setTargetSingleStudent(null);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={holdProcessing}
+                  onClick={() => {
+                    const idsToHold = targetSingleStudent
+                      ? [targetSingleStudent.id]
+                      : selectedAdminStudentIds;
+                    handleExecuteHold(idsToHold);
+                  }}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white font-bold text-xs rounded-lg shadow transition flex items-center gap-1.5"
+                >
+                  {holdProcessing ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <UserX className="w-3.5 h-3.5" />
+                  )}
+                  <span>Ya, Tahan (Hold) Siswa</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: KONFIRMASI UNHOLD SISWA */}
+      {unholdModalOpen && (
+        <div className="fixed inset-0 bg-navy-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="bg-emerald-950 text-white p-5 border-b-2 border-emerald-500">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-emerald-400" />
+                <span>Konfirmasi Unhold Siswa</span>
+              </h3>
+              <p className="text-xs text-emerald-300 mt-0.5">
+                Mengembalikan akses pemilihan jadwal pengambilan rapor
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Anda akan mengaktifkan kembali (Unhold){' '}
+                <strong>
+                  {targetSingleStudent
+                    ? `1 siswa (${targetSingleStudent.name})`
+                    : `${selectedAdminStudentIds.length} siswa`}
+                </strong>
+                .
+              </p>
+
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>Dampak Pembukaan (Unhold):</span>
+                </p>
+                <ul className="list-disc list-inside text-[11px] text-emerald-700 pl-1 space-y-0.5">
+                  <li>Nama siswa akan <strong>langsung muncul kembali</strong> di halaman utama web orang tua.</li>
+                  <li>Orang tua dapat memilih dan memesan jadwal rapor secara normal.</li>
+                </ul>
+              </div>
+
+              {/* Daftar Siswa yang akan di-Unhold */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Daftar Siswa yang Dibuka (Unhold):
+                </p>
+                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50">
+                  {(targetSingleStudent
+                    ? [targetSingleStudent]
+                    : students.filter((s) => selectedAdminStudentIds.includes(s.id))
+                  ).map((st) => (
+                    <div
+                      key={st.id}
+                      className="text-xs flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200"
+                    >
+                      <span className="font-bold text-navy-950">{st.name}</span>
+                      <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                        {st.class?.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={holdProcessing}
+                  onClick={() => {
+                    setUnholdModalOpen(false);
+                    setTargetSingleStudent(null);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={holdProcessing}
+                  onClick={() => {
+                    const idsToUnhold = targetSingleStudent
+                      ? [targetSingleStudent.id]
+                      : selectedAdminStudentIds;
+                    handleExecuteUnhold(idsToUnhold);
+                  }}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-bold text-xs rounded-lg shadow transition flex items-center gap-1.5"
+                >
+                  {holdProcessing ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <UserCheck className="w-3.5 h-3.5" />
+                  )}
+                  <span>Ya, Buka (Unhold) Siswa</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

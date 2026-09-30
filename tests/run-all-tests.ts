@@ -385,6 +385,64 @@ async function runTests() {
     `Jumlah booking di kelas VII A bertambah dari ${countBefore} menjadi ${countAfter}.`
   );
 
+  // =====================================================================
+  // TEST 13: Admin me-Hold siswa -> Siswa TIDAK tampil di web utama & booking dicegah
+  // =====================================================================
+  console.log('\n--- SKENARIO 13 ---');
+  // Pilih siswa untuk ditahan (Hold)
+  const studentToHold = await prisma.student.create({
+    data: {
+      name: 'Zulfa Khairunnisa',
+      classId: classVIIA.id,
+      active: true,
+    },
+  });
+
+  // Admin melakukan Hold (active = false)
+  await prisma.student.update({
+    where: { id: studentToHold.id },
+    data: { active: false },
+  });
+
+  // Cek apakah siswa muncul di query public data
+  const publicStudentsAfterHold = await prisma.student.findMany({
+    where: {
+      classId: classVIIA.id,
+      active: true,
+    },
+  });
+  const isPresentInPublicWhenHeld = publicStudentsAfterHold.some((s) => s.id === studentToHold.id);
+
+  assert(
+    isPresentInPublicWhenHeld === false,
+    'TEST 13: Admin me-Hold siswa -> Siswa TIDAK tampil di daftar pemilihan jadwal web utama',
+    `Siswa "${studentToHold.name}" berhasil di-Hold dan disembunyikan dari daftar publik.`
+  );
+
+  // =====================================================================
+  // TEST 14: Admin me-Unhold siswa -> Siswa KEMBALI tampil di web utama
+  // =====================================================================
+  console.log('\n--- SKENARIO 14 ---');
+  // Admin melakukan Unhold (active = true)
+  await prisma.student.update({
+    where: { id: studentToHold.id },
+    data: { active: true },
+  });
+
+  const publicStudentsAfterUnhold = await prisma.student.findMany({
+    where: {
+      classId: classVIIA.id,
+      active: true,
+    },
+  });
+  const isPresentInPublicWhenUnheld = publicStudentsAfterUnhold.some((s) => s.id === studentToHold.id);
+
+  assert(
+    isPresentInPublicWhenUnheld === true,
+    'TEST 14: Admin me-Unhold siswa -> Siswa KEMBALI tampil di web utama',
+    `Siswa "${studentToHold.name}" berhasil di-Unhold dan kembali aktif di daftar pemilihan jadwal.`
+  );
+
   console.log('\n================================================================');
   console.log(`📊 HASIL PENGUJIAN: ${passedCount} LULUS, ${failedCount} GAGAL`);
   console.log('================================================================\n');
