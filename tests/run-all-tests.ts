@@ -390,8 +390,17 @@ async function runTests() {
   // =====================================================================
   console.log('\n--- SKENARIO 13 ---');
   // Pilih siswa untuk ditahan (Hold)
-  const studentToHold = await prisma.student.create({
-    data: {
+  const studentToHold = await prisma.student.upsert({
+    where: {
+      name_classId: {
+        name: 'Zulfa Khairunnisa',
+        classId: classVIIA.id,
+      },
+    },
+    update: {
+      active: true,
+    },
+    create: {
       name: 'Zulfa Khairunnisa',
       classId: classVIIA.id,
       active: true,
@@ -442,6 +451,31 @@ async function runTests() {
     'TEST 14: Admin me-Unhold siswa -> Siswa KEMBALI tampil di web utama',
     `Siswa "${studentToHold.name}" berhasil di-Unhold dan kembali aktif di daftar pemilihan jadwal.`
   );
+
+  // =====================================================================
+  // TEST 15: Admin mengedit nama event/periode aktif -> Nama tersimpan & terbarui
+  // =====================================================================
+  console.log('\n--- SKENARIO 15 ---');
+  const originalEventName = activeEvent.name;
+  const newEventName = `${originalEventName} (Revisi Semester)`;
+
+  // Admin melakukan update nama event
+  const updatedEvent = await prisma.event.update({
+    where: { id: activeEvent.id },
+    data: { name: newEventName },
+  });
+
+  assert(
+    updatedEvent.name === newEventName,
+    'TEST 15: Admin mengedit nama event/periode aktif -> Nama tersimpan & terbarui',
+    `Nama event berhasil diubah dari "${originalEventName}" menjadi "${updatedEvent.name}".`
+  );
+
+  // Kembalikan nama ke semula agar data tetap konsisten
+  await prisma.event.update({
+    where: { id: activeEvent.id },
+    data: { name: originalEventName },
+  });
 
   console.log('\n================================================================');
   console.log(`📊 HASIL PENGUJIAN: ${passedCount} LULUS, ${failedCount} GAGAL`);

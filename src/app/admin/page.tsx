@@ -124,6 +124,12 @@ export default function AdminDashboardPage() {
   const [newEventDate, setNewEventDate] = useState('');
   const [newEventDuration, setNewEventDuration] = useState(15);
 
+  // Event Edit State
+  const [editingEvent, setEditingEvent] = useState<any | null>(null);
+  const [editEventName, setEditEventName] = useState('');
+  const [editEventDate, setEditEventDate] = useState('');
+  const [editEventSaving, setEditEventSaving] = useState(false);
+
   // 1. Initial Auth Check
   useEffect(() => {
     const checkAuth = async () => {
@@ -507,6 +513,44 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // --- EDIT EVENT / PERIODE LOGIC ---
+  const handleOpenEditEvent = (ev: any) => {
+    setEditingEvent(ev);
+    setEditEventName(ev.name);
+    setEditEventDate(ev.date || '');
+  };
+
+  const handleSaveEditEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEvent || !editEventName.trim()) return;
+
+    try {
+      setEditEventSaving(true);
+      const res = await fetch('/api/admin/events', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingEvent.id,
+          name: editEventName.trim(),
+          date: editEventDate || editingEvent.date,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        showNotification('success', `Nama event/periode berhasil diperbarui menjadi "${editEventName.trim()}".`);
+        setEditingEvent(null);
+        await loadAllData();
+      } else {
+        showNotification('error', json.message || 'Gagal memperbarui event');
+      }
+    } catch (err: any) {
+      showNotification('error', err.message || 'Terjadi kesalahan sistem');
+    } finally {
+      setEditEventSaving(false);
+    }
+  };
+
   // --- ADMINISTRASI (HOLD / UNHOLD) LOGIC ---
   const filteredAdminStudents = useMemo(() => {
     return students.filter((s) => {
@@ -755,23 +799,56 @@ export default function AdminDashboardPage() {
               {/* Event Info Card */}
               <div className="bg-gradient-to-r from-navy-950 via-navy-900 to-navy-800 text-white rounded-2xl p-6 shadow-md border-b-4 border-gold-500 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gold-400 bg-navy-800 px-2.5 py-1 rounded-full border border-gold-500/30">
-                    Periode Rapor Aktif
-                  </span>
-                  <h3 className="text-xl sm:text-2xl font-black mt-2 text-white">
-                    {activeEvent ? activeEvent.name : 'Belum Ada Event Aktif'}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gold-400 bg-navy-800 px-2.5 py-1 rounded-full border border-gold-500/30">
+                      Periode Rapor Aktif
+                    </span>
+                    {activeEvent && (
+                      <button
+                        onClick={() => handleOpenEditEvent(activeEvent)}
+                        className="text-[11px] font-bold text-gold-400 hover:text-gold-300 underline flex items-center gap-1 transition"
+                        title="Edit Nama Periode Aktif"
+                      >
+                        <Edit className="w-3 h-3" />
+                        <span>Edit Nama</span>
+                      </button>
+                    )}
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black mt-2 text-white flex items-center gap-2">
+                    <span>{activeEvent ? activeEvent.name : 'Belum Ada Event Aktif'}</span>
+                    {activeEvent && (
+                      <button
+                        onClick={() => handleOpenEditEvent(activeEvent)}
+                        className="p-1 rounded-lg bg-navy-800 hover:bg-navy-700 text-gold-400 border border-gold-500/30 transition text-xs"
+                        title="Edit Nama Event"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </h3>
                   <p className="text-xs text-slate-300 mt-1">
                     Tanggal: {activeEvent?.date || '-'} • Jam Mulai: {activeEvent?.startTime || '08:00'} WIB • Istirahat: 11:45–13:00 WIB
                   </p>
                 </div>
-                <button
-                  onClick={() => setActiveTab('events')}
-                  className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-navy-950 font-bold text-xs shadow transition flex items-center gap-1.5"
-                >
-                  <Calendar className="w-4 h-4" />
-                  <span>Atur Event</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {activeEvent && (
+                    <button
+                      onClick={() => handleOpenEditEvent(activeEvent)}
+                      className="px-3.5 py-2 rounded-xl bg-navy-800 hover:bg-navy-700 text-gold-400 font-bold text-xs border border-gold-500/40 shadow transition flex items-center gap-1.5"
+                      title="Edit Nama Periode Aktif"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>Edit Nama Periode</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setActiveTab('events')}
+                    className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-navy-950 font-bold text-xs shadow transition flex items-center gap-1.5"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    <span>Atur Event</span>
+                  </button>
+                </div>
               </div>
 
               {/* Grid 8 Cards Statistik (Section 18) */}
@@ -962,6 +1039,14 @@ export default function AdminDashboardPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenEditEvent(ev)}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition flex items-center gap-1"
+                          title="Edit Nama Event"
+                        >
+                          <Edit className="w-3.5 h-3.5 text-slate-600" />
+                          <span>Edit</span>
+                        </button>
                         {!ev.active && (
                           <button
                             onClick={async () => {
@@ -2296,6 +2381,81 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: EDIT NAMA EVENT / PERIODE */}
+      {editingEvent && (
+        <div className="fixed inset-0 bg-navy-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="bg-navy-950 text-white p-5 border-b-2 border-gold-500">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <Edit className="w-5 h-5 text-gold-400" />
+                <span>Edit Nama Event / Periode</span>
+              </h3>
+              <p className="text-xs text-gold-300 mt-0.5">
+                {editingEvent.active
+                  ? 'Periode ini sedang AKTIF di web orang tua'
+                  : 'Periode nonaktif'}
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveEditEvent} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy-950 mb-1">
+                  Nama Event / Periode <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editEventName}
+                  onChange={(e) => setEditEventName(e.target.value)}
+                  placeholder="Contoh: Pengambilan Rapor Semester Ganjil TP 2026/2027"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-navy-900 focus:outline-none font-medium"
+                  required
+                  autoFocus
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Nama ini akan langsung tampil di halaman depan untuk orang tua, dashboard pengawas, dan rekapan rapor.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-navy-950 mb-1">
+                  Tanggal Pelaksanaan
+                </label>
+                <input
+                  type="date"
+                  value={editEventDate}
+                  onChange={(e) => setEditEventDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-navy-900 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={editEventSaving}
+                  onClick={() => setEditingEvent(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={editEventSaving || !editEventName.trim()}
+                  className="px-5 py-2 bg-navy-900 hover:bg-navy-950 disabled:bg-slate-300 text-gold-400 font-bold text-xs rounded-lg shadow transition flex items-center gap-1.5"
+                >
+                  {editEventSaving ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  )}
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
