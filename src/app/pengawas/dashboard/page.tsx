@@ -36,6 +36,7 @@ interface BookingRecord {
   parentArrived: boolean;
   status: 'BELUM_DATANG' | 'MENUNGGU' | 'SEDANG_DILAYANI' | 'SELESAI' | 'TERLAMBAT';
   arrivedAt: string | null;
+  servedAt: string | null;
   completedAt: string | null;
 }
 
@@ -259,6 +260,31 @@ export default function PengawasDashboardPage() {
 
   // Update status (e.g. mark as SELESAI or SEDANG_DILAYANI)
   const handleUpdateStatus = async (bookingId: string, status: string) => {
+    const nowIso = new Date().toISOString();
+
+    // Optimistic update
+    setGroupedData((prev) =>
+      prev.map((grp) => ({
+        ...grp,
+        bookings: grp.bookings.map((b) => {
+          if (b.id !== bookingId) return b;
+          const updated: BookingRecord = {
+            ...b,
+            status: status as any,
+          };
+          if (status === 'SEDANG_DILAYANI') {
+            updated.servedAt = nowIso;
+            updated.parentArrived = true;
+          } else if (status === 'SELESAI') {
+            updated.completedAt = nowIso;
+          } else if (status === 'MENUNGGU') {
+            updated.completedAt = null;
+          }
+          return updated;
+        }),
+      }))
+    );
+
     try {
       await fetch('/api/pengawas/status', {
         method: 'POST',
@@ -309,6 +335,27 @@ export default function PengawasDashboardPage() {
     if (!currentTimeStr) return false;
     const currentHHMM = currentTimeStr.slice(0, 5);
     return currentHHMM >= startTime && currentHHMM < endTime;
+  };
+
+  // Helper to format ISO date string to HH:MM (Asia/Jakarta timezone)
+  const formatHHMM = (val: string | null | undefined): string => {
+    if (!val) return '';
+    if (/^\d{2}:\d{2}$/.test(val)) return val;
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '';
+      return new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(d).replace('.', ':');
+    } catch (e) {
+      const d = new Date(val);
+      const h = String(d.getHours()).padStart(2, '0');
+      const m = String(d.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
   };
 
   return (
@@ -545,7 +592,7 @@ export default function PengawasDashboardPage() {
                     <th className="py-2.5 px-3 w-32">Jam Pengambilan</th>
                     <th className="py-2.5 px-3 w-40 text-center">Orang Tua Datang</th>
                     <th className="py-2.5 px-3 w-32 text-center">Status</th>
-                    <th className="py-2.5 px-3 w-36 text-center">Aksi Pengawas</th>
+                    <th className="py-2.5 px-3 w-40 text-center">Aksi Pengawas</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -638,19 +685,37 @@ export default function PengawasDashboardPage() {
 
                           {/* Aksi Pengawas */}
                           <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
+                            <div className="flex items-start justify-center gap-2">
                               {b.status !== 'SELESAI' ? (
                                 <>
-                                  {b.status !== 'SEDANG_DILAYANI' && (
+                                  <div className="flex flex-col items-center">
                                     <button
                                       type="button"
                                       onClick={() => handleUpdateStatus(b.id, 'SEDANG_DILAYANI')}
-                                      className="px-2 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-[11px] font-semibold transition"
-                                      title="Tandai sedang dilayani"
+                                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition shadow-sm ${
+                                        b.status === 'SEDANG_DILAYANI'
+                                          ? 'bg-purple-700 text-white ring-2 ring-purple-300'
+                                          : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                                      }`}
+                                      title={
+                                        b.status === 'SEDANG_DILAYANI'
+                                          ? 'Sedang dilayani (klik untuk perbarui jam masuk)'
+                                          : 'Mulai layani'
+                                      }
                                     >
                                       Layani
                                     </button>
-                                  )}
+                                    {b.servedAt && (
+                                      <span
+                                        className="text-[11px] font-bold text-purple-800 mt-1 flex items-center gap-0.5 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200"
+                                        title="Waktu orang tua masuk dilayani"
+                                      >
+                                        <Clock className="w-2.5 h-2.5 text-purple-600" />
+                                        <span>{formatHHMM(b.servedAt)}</span>
+                                      </span>
+                                    )}
+                                  </div>
+
                                   <button
                                     type="button"
                                     onClick={() => handleUpdateStatus(b.id, 'SELESAI')}
@@ -661,13 +726,24 @@ export default function PengawasDashboardPage() {
                                   </button>
                                 </>
                               ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateStatus(b.id, 'MENUNGGU')}
-                                  className="text-[10px] text-slate-400 hover:text-slate-600 underline"
-                                >
-                                  Batalkan Selesai
-                                </button>
+                                <div className="flex flex-col items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateStatus(b.id, 'MENUNGGU')}
+                                    className="text-[10px] text-slate-400 hover:text-slate-600 underline"
+                                  >
+                                    Batalkan Selesai
+                                  </button>
+                                  {b.servedAt && (
+                                    <span
+                                      className="text-[10px] text-slate-500 font-medium flex items-center gap-0.5"
+                                      title="Waktu orang tua masuk dilayani"
+                                    >
+                                      <Clock className="w-2.5 h-2.5 text-slate-400" />
+                                      <span>Masuk: {formatHHMM(b.servedAt)}</span>
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </td>

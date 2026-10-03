@@ -68,12 +68,16 @@ CREATE TABLE IF NOT EXISTS "bookings" (
   "status" TEXT NOT NULL DEFAULT 'BELUM_DATANG',
   "parentArrived" BOOLEAN NOT NULL DEFAULT false,
   "arrivedAt" TIMESTAMP(3),
+  "servedAt" TIMESTAMP(3),
   "completedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "bookings_eventId_slotId_key" UNIQUE ("eventId", "slotId"),
   CONSTRAINT "bookings_eventId_studentId_key" UNIQUE ("eventId", "studentId")
 );
+
+-- Jalankan jika tabel bookings sudah pernah dibuat sebelumnya:
+ALTER TABLE "bookings" ADD COLUMN IF NOT EXISTS "servedAt" TIMESTAMP(3);
 
 CREATE TABLE IF NOT EXISTS "supervisor_classes" (
   "id" TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

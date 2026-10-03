@@ -115,6 +115,7 @@ export async function GET(req: NextRequest) {
           parentArrived: b.parentArrived,
           status: b.status,
           arrivedAt: b.arrivedAt,
+          servedAt: b.servedAt,
           completedAt: b.completedAt,
         });
       }

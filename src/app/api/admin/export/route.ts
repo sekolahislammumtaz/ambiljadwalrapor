@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
       'Status Kehadiran',
       'Orang Tua Datang',
       'Waktu Kedatangan',
+      'Waktu Masuk / Dilayani',
       'Status Selesai',
     ];
 
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
       const statusKehadiran = b ? b.status : 'AVAILABLE';
       const orangTuaDatang = b && b.parentArrived ? 'Sudah Datang' : 'Belum Datang';
       const waktuKedatangan = b && b.arrivedAt ? new Date(b.arrivedAt).toLocaleTimeString('id-ID') : '-';
+      const waktuDilayani = b && b.servedAt ? new Date(b.servedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') : '-';
       const statusSelesai = b && b.completedAt ? 'Selesai (' + new Date(b.completedAt).toLocaleTimeString('id-ID') + ')' : (b && b.status === 'SELESAI' ? 'Selesai' : 'Belum Selesai');
 
       return [
@@ -90,6 +92,7 @@ export async function GET(req: NextRequest) {
         escapeCsv(statusKehadiran),
         escapeCsv(orangTuaDatang),
         escapeCsv(waktuKedatangan),
+        escapeCsv(waktuDilayani),
         escapeCsv(statusSelesai),
       ].join(',');
     });

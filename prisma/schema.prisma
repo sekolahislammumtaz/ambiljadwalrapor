@@ -101,6 +101,7 @@ model Booking {
   status        String    @default("BELUM_DATANG") // "BELUM_DATANG", "MENUNGGU", "SEDANG_DILAYANI", "SELESAI", "TERLAMBAT"
   parentArrived Boolean   @default(false)
   arrivedAt     DateTime?
+  servedAt      DateTime?
   completedAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

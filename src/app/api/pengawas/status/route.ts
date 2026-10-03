@@ -45,6 +45,12 @@ export async function POST(req: NextRequest) {
       dataToUpdate.status = status;
       if (status === 'SELESAI') {
         dataToUpdate.completedAt = new Date();
+      } else if (status === 'SEDANG_DILAYANI') {
+        dataToUpdate.servedAt = new Date();
+        dataToUpdate.parentArrived = true;
+        if (!currentBooking.arrivedAt) {
+          dataToUpdate.arrivedAt = new Date();
+        }
       } else if (status === 'MENUNGGU') {
         dataToUpdate.completedAt = null;
       }
@@ -72,6 +78,7 @@ export async function POST(req: NextRequest) {
         parentArrived: updated.parentArrived,
         status: updated.status,
         arrivedAt: updated.arrivedAt,
+        servedAt: updated.servedAt,
         completedAt: updated.completedAt,
       },
     });

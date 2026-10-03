@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
       bookingStatus: s.booking ? s.booking.status : 'BELUM_DIPESAN',
       parentArrived: s.booking ? s.booking.parentArrived : false,
       arrivedAt: s.booking?.arrivedAt || null,
+      servedAt: s.booking?.servedAt || null,
       completedAt: s.booking?.completedAt || null,
     }));
 

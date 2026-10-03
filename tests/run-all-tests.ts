@@ -477,6 +477,41 @@ async function runTests() {
     data: { name: originalEventName },
   });
 
+  // =====================================================================
+  // TEST 16: Pengawas menekan tombol Layani -> Status SEDANG_DILAYANI & waktu servedAt tercatat (HH:MM)
+  // =====================================================================
+  console.log('\n--- SKENARIO 16 ---');
+  const bookingToServe = await prisma.booking.findFirst({
+    where: { eventId: activeEvent.id },
+  });
+  if (!bookingToServe) throw new Error('Booking untuk pengujian layani tidak ditemukan');
+
+  const servedBooking = await prisma.booking.update({
+    where: { id: bookingToServe.id },
+    data: {
+      status: 'SEDANG_DILAYANI',
+      servedAt: new Date(),
+      parentArrived: true,
+    },
+  });
+
+  const servedTimeHHMM = servedBooking.servedAt
+    ? new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(servedBooking.servedAt).replace('.', ':')
+    : '';
+
+  assert(
+    servedBooking.status === 'SEDANG_DILAYANI' &&
+      servedBooking.servedAt !== null &&
+      /^\d{2}:\d{2}$/.test(servedTimeHHMM),
+    'TEST 16: Pengawas menekan tombol Layani -> Status SEDANG_DILAYANI & waktu servedAt tercatat (HH:MM)',
+    `Status booking: "${servedBooking.status}", waktu orang tua masuk dilayani: "${servedTimeHHMM}".`
+  );
+
   console.log('\n================================================================');
   console.log(`📊 HASIL PENGUJIAN: ${passedCount} LULUS, ${failedCount} GAGAL`);
   console.log('================================================================\n');
